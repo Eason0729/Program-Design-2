@@ -6,6 +6,8 @@
 
 Compelete rework of MDOJ Judger
 
+**Add `Java` Language support**
+
 **Rework `language`**
 - Decouple with interface
 
