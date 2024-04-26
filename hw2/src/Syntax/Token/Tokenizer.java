@@ -20,7 +20,7 @@ public class Tokenizer {
             new StringCharacterIterator(")"),
             new StringCharacterIterator(","),
     };
-    private static final char[] splitter = {'\n', ' '};
+    private static final char[] splitter = {'\t', '\n', ' '};
     Queue<Ident> tokens = new LinkedList<>();
     CharacterIterator[] progress = delimiters;
     PeekableReader content;

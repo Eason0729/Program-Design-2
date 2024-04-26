@@ -53,7 +53,7 @@ public class CodeGenerator {
     public void generate() throws Exception {
         for (TypeDeclare typeDeclare : classes.values()) {
             String typeName = typeDeclare.typeName.token;
-            File file = new File(typeName + ".java.test");
+            File file = new File(typeName + ".java");
             if (!file.exists()) file.createNewFile();
             FileWriter writer = new FileWriter(file);
             writer.write(typeDeclare.export());
