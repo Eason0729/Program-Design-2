@@ -22,4 +22,6 @@ public class TrieSys {
     protected static native void treeMerge(long mut_ptr, long ptr);
 
     protected static native long treeClone(long ptr);
+
+    protected static native void treeBulkIncreaseTokenized(long ptr, String tokens);
 }

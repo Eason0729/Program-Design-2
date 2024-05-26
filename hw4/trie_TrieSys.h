@@ -63,6 +63,22 @@ JNIEXPORT void JNICALL Java_trie_TrieSys_treeMerge
 JNIEXPORT jlong JNICALL Java_trie_TrieSys_treeClone
   (JNIEnv *, jclass, jlong);
 
+/*
+ * Class:     trie_TrieSys
+ * Method:    treeBulkIncrease
+ * Signature: (J[Ljava/lang/String;)V
+ */
+JNIEXPORT void JNICALL Java_trie_TrieSys_treeBulkIncrease
+  (JNIEnv *, jclass, jlong, jobjectArray);
+
+/*
+ * Class:     trie_TrieSys
+ * Method:    treeBulkIncreaseTokenized
+ * Signature: (JLjava/lang/String;)V
+ */
+JNIEXPORT void JNICALL Java_trie_TrieSys_treeBulkIncreaseTokenized
+  (JNIEnv *, jclass, jlong, jstring);
+
 #ifdef __cplusplus
 }
 #endif

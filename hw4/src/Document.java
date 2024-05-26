@@ -16,10 +16,8 @@ public class Document {
             String line = input.readLine();
             if (line == null) break;
             List<String> words = Tokenizer.tokenizer(line);
-            for (String word : words) {
-                wordCount++;
-                tree.increase(word);
-            }
+            wordCount += words.size();
+            tree.blukIncrease(words.toArray(new String[0]));
         }
     }
 

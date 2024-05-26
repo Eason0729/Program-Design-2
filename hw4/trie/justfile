@@ -1,0 +1,6 @@
+build:
+  RUSTFLAGS="-C target_cpu=x86-64-v3" cargo pgo build
+optimize:
+  RUSTFLAGS="-C target_cpu=x86-64-v3" cargo pgo optimize
+sample:
+  LLVM_PROFILE_FILE=/home/eason/Documents/project/Program-Design-2/hw4/trie/target/pgo-profiles/hw4-rs_%m_%p.profraw /home/eason/Documents/project/hw4-rs/target/x86_64-unknown-linux-gnu/release/hw4-rs docs.txt testcase/tc0.txt

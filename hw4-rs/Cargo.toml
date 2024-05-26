@@ -1,0 +1,20 @@
+[package]
+name = "hw4-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+lto = true
+opt-level = 's'
+panic = "abort"
+strip = "symbols"
+
+[dependencies]
+rayon = "1.10.0"
+tikv-jemallocator = "0.5.4"
+
+[dependencies.tokio]
+version = "1.37.0"
+features = ["fs","rt-multi-thread","io-util","macros"]

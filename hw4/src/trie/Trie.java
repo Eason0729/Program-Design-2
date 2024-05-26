@@ -31,6 +31,18 @@ public class Trie {
     }
 
     /**
+     * Increase value by one on a list of path
+     * <p>
+     * this method can be used to avoid FFI overhead
+     *
+     * @param paths
+     */
+    public void blukIncrease(String[] paths) {
+        TrieSys.treeBulkIncreaseTokenized(rustInstance, String.join(" ", paths));
+    }
+
+
+    /**
      * Get value by path
      *
      * @param path

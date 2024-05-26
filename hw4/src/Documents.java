@@ -13,6 +13,7 @@ public class Documents {
     public Documents(String filename) throws IOException {
         this(new BufferedReader(new FileReader(filename)));
     }
+
     public Documents(Reader input) throws IOException {
         BufferedReader reader = new BufferedReader(input);
         while (true) {
@@ -26,7 +27,8 @@ public class Documents {
     public double inverseDocumentFrequency(String term) {
         return Math.log(docs.size() / (double) occurrences.get(term));
     }
+
     public double tfidf(String term, Document doc) {
-        return doc.termFrequency(term)*inverseDocumentFrequency(term);
+        return doc.termFrequency(term) * inverseDocumentFrequency(term);
     }
 }

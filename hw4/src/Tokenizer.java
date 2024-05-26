@@ -5,7 +5,7 @@ import java.util.List;
 
 public class Tokenizer {
     private static boolean isDelimiter(char c) {
-        return !(('a'<=c&&c<='z')||('A'<=c&&c<='Z'));
+        return !(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z'));
     }
 
     public static List<String> tokenizer(String input) {

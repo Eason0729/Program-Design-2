@@ -12,12 +12,14 @@ class TrieTest {
         trie.insert("hello", 1);
         assertEquals(1, trie.get("hello"));
     }
+
     @Test
     void increase() {
         Trie trie = new Trie();
         trie.increase("hello");
         assertEquals(1, trie.get("hello"));
     }
+
     @Test
     void merge() {
         Trie trie1 = new Trie();
