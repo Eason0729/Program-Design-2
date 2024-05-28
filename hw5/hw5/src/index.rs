@@ -1,6 +1,9 @@
 use rayon::iter::IndexedParallelIterator;
 use rayon::prelude::*;
-use rkyv::ser::{serializers::*, Serializer};
+use rkyv::{
+    ser::{serializers::*, Serializer},
+    AlignedVec,
+};
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
@@ -28,7 +31,7 @@ unsafe fn merge_slice_mut<'a, T: Sized>(a: &[&'a mut [T]]) -> &'a mut [T] {
     std::slice::from_raw_parts_mut(start_ptr, len)
 }
 
-pub fn index(input: impl AsRef<Path>, output: impl AsRef<Path>) {
+pub fn index(input: impl AsRef<Path>, output: impl AsRef<Path>) -> AlignedVec {
     let mut output = OpenOptions::new()
         .create(true)
         .write(true)
@@ -57,11 +60,13 @@ pub fn index(input: impl AsRef<Path>, output: impl AsRef<Path>) {
         .enumerate()
         .collect::<Vec<_>>()
     {
-        tree.insert_doc(id as u32, doc)
+        tree.insert_doc(id as u64, doc)
     }
 
     let mut serializer = AllocSerializer::<0>::default();
     serializer.serialize_value(&tree).unwrap();
     let bytes = serializer.into_serializer().into_inner();
     output.write_all(&bytes).unwrap();
+    output.flush().unwrap();
+    bytes
 }

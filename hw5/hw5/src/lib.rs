@@ -3,6 +3,7 @@ mod index;
 mod search;
 mod string;
 mod token;
+mod float;
 
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt, path::Path};
 use string::{OsStrExt as _, OsStringExt as _};

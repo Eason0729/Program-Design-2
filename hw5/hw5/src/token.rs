@@ -45,13 +45,22 @@ impl<'a> Tokenizer<'a> {
     pub fn next(&mut self) -> Option<&[u8]> {
         let mut start = self.cursor;
         loop {
-            let current = self.raw.get_mut(self.cursor)?;
-            self.cursor += 1;
-            if !make_variant_in_place(current) {
-                if (start + 1) != self.cursor {
-                    break Some(&self.raw[start..(self.cursor - 1)]);
+            match self.raw.get_mut(self.cursor) {
+                Some(current) => {
+                    self.cursor += 1;
+                    if !make_variant_in_place(current) {
+                        if (start + 1) != self.cursor {
+                            break Some(&self.raw[start..(self.cursor - 1)]);
+                        }
+                        start = self.cursor;
+                    }
                 }
-                start = self.cursor;
+                None => {
+                    if start != self.cursor {
+                        break Some(&self.raw[start..self.cursor]);
+                    }
+                    break None;
+                }
             }
         }
     }

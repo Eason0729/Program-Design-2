@@ -2,9 +2,10 @@ use memmap::Mmap;
 use rayon::prelude::*;
 use std::{
     collections::BTreeMap,
+    ffi::OsStr,
     fs::File,
     io::{BufRead, BufReader, Read, Write},
-    ops::Deref,
+    os::unix::ffi::OsStrExt,
     path::Path,
 };
 
@@ -12,16 +13,17 @@ use crate::{
     doc::{ArchivedTree, Tree},
     token::Tokenizer,
 };
-use rkyv::validation::validators::check_archived_root;
+use rkyv::AlignedVec;
 
+#[derive(PartialEq, Eq, Debug)]
 enum Mode {
     And,
     Or,
     Single,
 }
 struct Request<'a> {
-    mode: Mode,
-    sets: Vec<(&'a [u8], usize)>,
+    pub mode: Mode,
+    pub sets: Vec<(&'a [u8], usize)>,
 }
 
 impl<'a> Request<'a> {
@@ -35,30 +37,45 @@ impl<'a> Request<'a> {
                 Mode::Single
             }
         };
-        let tokenizer = Tokenizer::new(token);
         let mut strategy = BTreeMap::new();
-        tokenizer.iter().for_each(|x| {
-            *strategy.entry(x).or_default() += 1;
-        });
+        Tokenizer::new(token)
+            .iter()
+            .enumerate()
+            .filter(|x| (x.0 % 2) == 0)
+            .for_each(|(_, x)| {
+                *strategy.entry(x).or_default() += 1;
+            });
         let sets = strategy.into_iter().map(|(a, b)| (&*a, b)).collect();
         Self { mode, sets }
     }
     fn lookup(self, tree: &ArchivedTree, max: usize) -> Vec<isize> {
-        let mut tfidfs: BTreeMap<u32, f64> = BTreeMap::new();
+        let mut tfidfs: BTreeMap<u64, (f64, usize)> = BTreeMap::new();
+
+        let required_occurance = match self.mode {
+            Mode::And => self.sets.len(),
+            Mode::Or => 0,
+            Mode::Single => 0,
+        };
         for (word, multiplier) in self.sets {
             for (doc, tfidf) in tree.TFIDF(word) {
-                println!("{} {}", doc, tfidf);
-                *tfidfs.entry(doc).or_default() += tfidf * multiplier as f64;
+                let val = tfidfs.entry(doc).or_default();
+                val.0 += tfidf * multiplier as f64;
+                val.1 += 1;
             }
         }
         let mut result = Vec::new();
-        let mut tfidfs = tfidfs.iter();
-        while result.len() < max {
-            match tfidfs.next_back() {
-                Some((doc, _)) => result.push(*doc as isize),
-                None => break,
-            }
+
+        let mut tfidfs = tfidfs
+            .into_iter()
+            .rev()
+            .filter(|(_, v)| v.1 >= required_occurance)
+            .collect::<Vec<_>>();
+        tfidfs.sort_by(|a, b| b.1 .0.partial_cmp(&a.1 .0).unwrap_or(std::cmp::Ordering::Equal));
+        
+        for (id, _) in tfidfs {
+            result.push(id as isize);
         }
+
         result.resize(max, -1);
         result
     }
@@ -69,14 +86,12 @@ struct InputParser<'a> {
 }
 
 impl<'a> InputParser<'a> {
-    fn from_mmap(mmap: &'a Mmap) -> Self {
-        let buf = mmap.deref();
-        let tree = unsafe { rkyv::check_archived_root::<Tree>(buf) }.unwrap();
+    fn from_byte(buf: &'a [u8]) -> Self {
+        let tree = unsafe{rkyv::archived_root::<Tree>(buf)};
         Self { tree }
     }
-    fn parse_input(self, input: impl AsRef<Path>) -> Searcher<'a> {
-        println!("{:?}", input.as_ref());
-        let mut input = BufReader::new(File::open(input).unwrap());
+    fn parse_input(self, input: impl Read) -> Searcher<'a> {
+        let mut input = BufReader::new(input);
         let mut n = String::new();
         input.read_line(&mut n).unwrap();
         let n: usize = n.trim().parse().unwrap();
@@ -100,6 +115,7 @@ impl<'a> Searcher<'a> {
     fn search(mut self) -> Vec<u8> {
         self.buf
             .par_split_mut(|&x| x == b'\n')
+            .filter(|x| !x.is_empty())
             .map(move |x| {
                 let req = Request::from_token(x);
                 req.lookup(&self.tree, self.max)
@@ -117,10 +133,41 @@ impl<'a> Searcher<'a> {
 pub fn search(index: impl AsRef<Path>, input: impl AsRef<Path>) {
     let index = File::open(index).unwrap();
     let mmap = unsafe { Mmap::map(&index) }.unwrap();
+    debug_assert_eq!(0,((*mmap).as_ptr() as usize)%8);
+    // let mut index = File::open(index).unwrap();
+    // let mut mmap = AlignedVec::new();
+    // mmap.extend_from_reader(&mut index).unwrap();
 
-    let output = InputParser::from_mmap(&mmap).parse_input(input).search();
+    let output = InputParser::from_byte(&mmap)
+        .parse_input(File::open(input).unwrap())
+        .search();
 
     let mut output_file = File::create("output.txt").unwrap();
     output_file.write_all(&output).unwrap();
     output_file.flush().unwrap();
+}
+
+pub fn search_raw(vec: AlignedVec, input: impl AsRef<Path>) {
+    let output = InputParser::from_byte(&vec)
+        .parse_input(File::open(input).unwrap())
+        .search();
+
+    let mut output_file = File::create("output.txt").unwrap();
+    output_file.write_all(&output).unwrap();
+    output_file.flush().unwrap();
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_request() {
+        let mut token = b"aa AND aaa OR aaaa AND aaaa".to_vec();
+        let req = Request::from_token(&mut token);
+        assert_eq!(req.mode, Mode::And);
+        let mut result = req.sets.into_iter();
+        assert_eq!(result.next().unwrap(), (b"aa".as_ref(), 1));
+        assert_eq!(result.next().unwrap(), (b"aaa".as_ref(), 1));
+        assert_eq!(result.next().unwrap(), (b"aaaa".as_ref(), 2));
+    }
 }
