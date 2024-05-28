@@ -15,4 +15,4 @@ release:
     cp src/BuildIndex.java submit
     cp src/Indexer.java submit
     cp src/TFIDFSearch.java submit
-    deno run --allow-read=. --allow-write=submit ./embed_dylib.js submit/Indexer.java hw5/target/debug/libhw5.so
+    deno run --allow-read=. --allow-write=submit ./embed_dylib.js submit/Indexer.java hw5/target/release/libhw5.so
