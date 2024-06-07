@@ -1,0 +1,4 @@
+3
+abc AND eee
+abc OR eee
+eee

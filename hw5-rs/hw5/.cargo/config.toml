@@ -1,5 +1,0 @@
-# rustc-flags = "-Ctarget-feature=+soft-float"
-
-# [target.x86_64-unknown-linux-gnu]
-# code-model = "large"
-# rustc-flags = ["-C", "target-feature=+soft-float"]
