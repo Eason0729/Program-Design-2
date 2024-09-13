@@ -9,5 +9,5 @@
 - HW4-rs: text searching using trie with JNI and Rust
 - HW5: blazingly fast TFIDF indexing
   - index 5MB in 0.03 seconds
-  - perform one complex search in 0.0003 seconds
+  - perform one complex search in 0.00017 seconds
   - complete 4 example test in 0.05 seconds with single threaded
