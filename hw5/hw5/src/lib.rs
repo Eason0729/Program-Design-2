@@ -1,4 +1,5 @@
 #![feature(trivial_bounds)]
+
 mod doc;
 mod index;
 mod search;
@@ -51,3 +52,22 @@ pub extern "system" fn Java_Indexer_TFIDFSearch<'local>(
 
     search::search(tree_path, input);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn index() {
+        index::index("../testcase/corpus0.txt", "output.ser");
+    }
+
+    #[test]
+    fn index_and_search() {
+        index::index("../testcase/corpus0.txt", "output.ser");
+        search::search("output.ser", "../testcase/tc4.txt");
+    }
+}
+
+pub use index::index;
+pub use search::search;
