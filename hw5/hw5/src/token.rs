@@ -13,12 +13,9 @@ fn make_variant_in_place(raw: &mut u8) -> bool {
     }
 }
 #[inline]
+#[allow(clippy::manual_is_ascii_check)]
 fn is_variant(raw: u8) -> bool {
-    match raw {
-        b'a'..=b'z' => true,
-        b'A'..=b'Z' => true,
-        _ => false,
-    }
+    matches!(raw, b'a'..=b'z' | b'A'..=b'Z')
 }
 pub struct Tokenizer<'a> {
     raw: &'a mut [u8],
@@ -33,6 +30,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
     pub fn iter(self) -> impl Iterator<Item = &'a mut [u8]> {
+        #[allow(clippy::all)]
         self.raw.split_mut(|&x| !is_variant(x)).map(|x| {
             x.iter_mut().for_each(|x| {
                 make_variant_in_place(x);

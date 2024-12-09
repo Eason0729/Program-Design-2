@@ -1,3 +1,4 @@
 /target
 *.ser
 *.class
+/output.txt

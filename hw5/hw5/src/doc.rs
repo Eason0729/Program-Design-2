@@ -1,11 +1,10 @@
-use hashbrown::HashMap;
 use ordered_float::OrderedFloat;
 use rayon::prelude::*;
 use rkyv::{Archive, Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub fn e_log(inp: f64) -> f64 {
-    unsafe { fdlibm_rs::__ieee754_log(inp.into()) }
+    unsafe { fdlibm_rs::__ieee754_log(inp) }
 }
 
 #[derive(Default)]
@@ -54,7 +53,7 @@ impl Document {
         let mut self_ = Self::default();
 
         for token in tokens {
-            self_.add(&token);
+            self_.add(token);
         }
         self_
     }
@@ -83,18 +82,14 @@ impl TreeBuilder {
 
 impl TreeBuilder {
     pub fn tfidfs(self) -> impl Iterator<Item = (Vec<u8>, Vec<(u32, f64)>)> {
-        let total_docs: u64 = self.total_docs.into();
+        let total_docs: u64 = self.total_docs;
         self.tree.into_iter().map(move |(word, docs)| {
             let word_counts = &self.word_counts;
             let inverse_document_frequency = docs.inverse_document_frequency(total_docs);
             let mut tfidf: Vec<(u32, f64)> = docs
                 .term_frequency(word_counts)
-                .into_iter()
                 .map(|(doc, term_frequency)| {
-                    (
-                        doc as u32,
-                        term_frequency * inverse_document_frequency.clone(),
-                    )
+                    (doc as u32, term_frequency * inverse_document_frequency)
                 })
                 .collect();
             tfidf.par_sort_by(|a, b| a.0.cmp(&b.0));
@@ -108,8 +103,8 @@ impl TreeBuilder {
 #[archive_attr(derive(Debug))]
 pub struct Tree(BTreeMap<Vec<u8>, Vec<(u32, OrderedFloat<f64>)>>);
 
-impl From<crate::doc::TreeBuilder> for Tree {
-    fn from(value: crate::doc::TreeBuilder) -> Self {
+impl From<TreeBuilder> for Tree {
+    fn from(value: TreeBuilder) -> Self {
         let mut tree = BTreeMap::new();
         for (key, value) in value.tfidfs() {
             tree.insert(key, value.into_iter().map(|(a, b)| (a, b.into())).collect());
@@ -119,10 +114,19 @@ impl From<crate::doc::TreeBuilder> for Tree {
 }
 
 impl ArchivedTree {
-    pub fn tfidf(&self, word: &[u8]) -> Vec<(u32, f64)> {
+    pub fn tfidf(&self, word: &[u8], multiplier: f64) -> impl Iterator<Item = (u32, f64)> + '_ {
+        #[cfg(debug_assertions)]
+        if let Some(data) = self.0.get(word) {
+            assert!(
+                data.windows(2).all(|w| w[0].0 < w[1].0),
+                "data for word {} is not sorted",
+                String::from_utf8_lossy(word)
+            );
+        }
         self.0
             .get(word)
-            .map(|x| x.iter().map(|(a, b)| (*a, f64::from(*b))).collect())
+            .map(|x| x.iter())
             .unwrap_or_default()
+            .map(move |(a, b)| (*a, b.0 * multiplier))
     }
 }

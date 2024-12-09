@@ -27,10 +27,6 @@ jni = "0.21.1"
 memmap = "0.7.0"
 rayon = "1.10.0"
 
-[dependencies.hashbrown]
-version = "0.14.5"
-features = ["rayon","rkyv", "nightly"]
-
 [dependencies.ordered-float]
 version = "4.2.0"
 features = ["rkyv"]

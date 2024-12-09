@@ -1,9 +1,7 @@
 use crate::{doc::*, token::Tokenizer};
-use hashbrown::HashMap;
 use memmap::Mmap;
 use ordered_float::OrderedFloat;
 use rayon::prelude::*;
-use std::collections::BinaryHeap;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -11,7 +9,6 @@ use std::{
     path::Path,
 };
 
-const EFFECTIVE_OPTIMIZE_RATIO: usize = 3;
 #[derive(PartialEq, Eq, Debug)]
 enum Mode {
     And,
@@ -46,105 +43,91 @@ impl<'a> Request<'a> {
         Self { mode, sets }
     }
     fn lookup_single(self, tree: &ArchivedTree) -> Vec<(u32, f64)> {
-        tree.tfidf(self.sets[0].0)
+        tree.tfidf(self.sets[0].0, 1.0).collect()
     }
     fn lookup_or(self, tree: &ArchivedTree) -> Vec<(u32, f64)> {
-        let mut tfidfs: HashMap<u32, f64> = HashMap::new();
+        let mut tfidfs: Vec<(u32, f64)> = Vec::new();
 
         for (word, multiplier) in self.sets {
-            for (doc, tfidf) in tree.tfidf(word) {
-                let val = tfidfs.entry(doc).or_insert_with(|| 0.0);
-                *val += tfidf * multiplier as f64;
-            }
-        }
-
-        tfidfs.into_iter().collect()
-    }
-    fn lookup_and(self, tree: &ArchivedTree) -> Vec<(u32, f64)> {
-        let mut tfidfs: HashMap<u32, (f64, usize)> = HashMap::new();
-
-        let required_occurance = self.sets.len();
-        for (word, multiplier) in self.sets {
-            for (doc, tfidf) in tree.tfidf(word) {
-                let val = tfidfs.entry(doc).or_insert_with(|| (0.0, 0));
-                val.0 += tfidf * multiplier as f64;
-                val.1 += 1;
+            let mut a_tfidfs = std::mem::take(&mut tfidfs).into_iter().peekable();
+            let mut b_tfidfs = tree.tfidf(word, multiplier as f64).peekable();
+            loop {
+                if a_tfidfs.peek().is_none() {
+                    tfidfs.extend(b_tfidfs);
+                    break;
+                }
+                if b_tfidfs.peek().is_none() {
+                    tfidfs.extend(a_tfidfs);
+                    break;
+                }
+                if a_tfidfs.peek().unwrap().0 > b_tfidfs.peek().unwrap().0 {
+                    tfidfs.push(b_tfidfs.next().unwrap());
+                } else {
+                    tfidfs.push(a_tfidfs.next().unwrap());
+                }
+                if tfidfs.len() >= 2
+                    && tfidfs.get(tfidfs.len() - 2).map(|(a, _)| a) == tfidfs.last().map(|(a, _)| a)
+                {
+                    let (_, tfidf) = tfidfs.pop().unwrap();
+                    tfidfs.last_mut().unwrap().1 += tfidf;
+                }
             }
         }
 
         tfidfs
-            .into_par_iter()
-            .filter(|(_, v)| v.1 >= required_occurance)
-            .map(|(a, (b, _))| (a, b))
-            .collect()
+    }
+    fn lookup_and(self, tree: &ArchivedTree) -> Vec<(u32, f64)> {
+        let mut sets = self.sets.into_iter();
+
+        let mut tfidfs: Vec<(u32, f64)> = match sets.next() {
+            Some((x, multiplier)) => tree.tfidf(x, multiplier as f64).collect(),
+            None => {
+                return Vec::new();
+            }
+        };
+
+        for (word, multiplier) in sets {
+            let mut a_tfidfs = std::mem::take(&mut tfidfs).into_iter().peekable();
+            let mut b_tfidfs = tree.tfidf(word, multiplier as f64).peekable();
+            loop {
+                match (a_tfidfs.peek(), b_tfidfs.peek()) {
+                    (Some((a_id, a_score)), Some((b_id, b_score))) if a_id == b_id => {
+                        tfidfs.push((*a_id, *a_score + *b_score));
+                        a_tfidfs.next();
+                        b_tfidfs.next();
+                    }
+                    (Some((a_id, _)), Some((b_id, _))) if a_id > b_id => {
+                        b_tfidfs.next();
+                    }
+                    (Some((a_id, _)), Some((b_id, _))) if a_id < b_id => {
+                        a_tfidfs.next();
+                    }
+                    _ => break,
+                }
+            }
+        }
+
+        tfidfs
     }
     fn lookup_with_max(self, tree: &ArchivedTree, max: usize) -> Vec<isize> {
-        fn find_n_largest(
-            iter: impl ParallelIterator<Item = (u32, OrderedFloat<f64>)>,
-            n: usize,
-        ) -> Vec<u32> {
-            iter.fold(
-                || BinaryHeap::with_capacity(n),
-                |mut acc, x| {
-                    if acc.len() < n {
-                        acc.push(x);
-                    } else if acc.peek().unwrap().1 > x.1 {
-                        *acc.peek_mut().unwrap() = x;
-                    }
-                    acc
-                },
-            )
-            .reduce(
-                || BinaryHeap::new(),
-                |mut h1, h2| {
-                    for x in h2 {
-                        if h1.len() < n {
-                            h1.push(x);
-                        } else if *h1.peek().unwrap() > x {
-                            *h1.peek_mut().unwrap() = x;
-                        }
-                    }
-                    h1
-                },
-            )
-            .into_iter()
-            .map(|x| x.0)
-            .collect()
-        }
         let mut result = match self.mode {
             Mode::And => self.lookup_and(tree),
             Mode::Or => self.lookup_or(tree),
             Mode::Single => self.lookup_single(tree),
         };
-        if result.len() >= max * EFFECTIVE_OPTIMIZE_RATIO {
-            let largest_n = find_n_largest(
-                result
-                    .into_iter()
-                    .map(|(a, b)| (a, b.into()))
-                    .collect::<Vec<_>>()
-                    .into_par_iter(),
-                max,
-            );
-            let result = largest_n
-                .into_iter()
-                .map(|x| x as isize)
-                .collect::<Vec<_>>();
-            result
-        } else {
-            // sort
-            result.par_sort_unstable_by(|a, b| {
-                let a = OrderedFloat(a.1);
-                let b = OrderedFloat(b.1);
-                b.total_cmp(&a)
-            });
-            // convert to isize
-            let mut result = result
-                .into_iter()
-                .map(|(a, _)| a as isize)
-                .collect::<Vec<_>>();
-            result.resize(max, -1);
-            return result;
-        }
+        // sort
+        result.par_sort_unstable_by(|a, b| {
+            let a = OrderedFloat(a.1);
+            let b = OrderedFloat(b.1);
+            b.total_cmp(&a)
+        });
+        // convert to isize
+        let mut result = result
+            .into_iter()
+            .map(|(a, _)| a as isize)
+            .collect::<Vec<_>>();
+        result.resize(max, -1);
+        result
     }
 }
 
@@ -178,14 +161,14 @@ struct Searcher<'a> {
     buf: Vec<u8>,
 }
 
-impl<'a> Searcher<'a> {
+impl Searcher<'_> {
     fn search(mut self) -> Vec<u8> {
         self.buf
             .par_split_mut(|&x| x == b'\n')
             .filter(|x| !x.is_empty())
             .map(move |x| {
                 let req = Request::from_token(x);
-                req.lookup_with_max(&self.tree, self.max)
+                req.lookup_with_max(self.tree, self.max)
                     .into_iter()
                     .map(|x| x.to_string())
                     .collect::<Vec<_>>()

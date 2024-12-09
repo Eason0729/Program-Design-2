@@ -14,6 +14,9 @@ use jni::{
     JNIEnv,
 };
 
+pub use index::index;
+pub use search::search;
+
 #[no_mangle]
 pub extern "system" fn Java_Indexer_buildIndex<'local>(
     mut env: JNIEnv<'local>,
@@ -68,6 +71,3 @@ mod tests {
         search::search("output.ser", "../testcase/tc4.txt");
     }
 }
-
-pub use index::index;
-pub use search::search;
